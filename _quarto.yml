@@ -1,0 +1,38 @@
+project:
+  type: book
+
+book:
+  title: "Statistical Rethinking"
+  subtitle: "Notes working through the book"
+  author: "Daniela Palleschi"
+  downloads: [pdf]
+  date: "9/25/2023"
+  chapters:
+    - part: "Overview"
+      chapters:
+        - index.qmd
+        # - intro.qmd
+        - setup.qmd
+    - part: "Chapter notes"
+      chapters:
+        - notes/02-small_worlds.qmd
+        - notes/03-sampling.qmd
+        - notes/04-geometric_models.qmd
+    - references.qmd
+
+
+bibliography: references.bib
+
+format:
+  html:
+    theme: cosmo
+    embed-resources: false
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    include-in-header: mathjax.html
+  pdf:
+    documentclass: scrreprt
+
+
+

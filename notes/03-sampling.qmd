@@ -1,0 +1,272 @@
+---
+title: "Sampling the Imaginary"
+subtitle: "Chapter 3"
+author: "Daniela Palleschi"
+include-in-header: ../mathjax.html # for multiple equation hyperrefs
+---
+
+Also following [Solomon Kurz's E-book](https://bookdown.org/content/3890/sampling-the-imaginary.html#summary-lets-practice-with-brms).
+
+```{r}
+options(scipen=999)
+```
+
+
+```{r}
+pacman::p_load(
+  tidyverse,
+  brm,
+  rethinking,
+  knitr,
+  kableExtra
+)
+```
+
+## Thinking in probabilities vs. frequencies
+
+- let's say there's a blood test that detects vampirism 95\% of the time
+  + so **Pr(positive test result|vampire) = 0.95**
+- there is also an error rate, in that it makes falsep ositive 1\% of the time
+  + so **Pr(positive test result|mortal) = 0.01**
+- also, vampires are rare, comprising of only 0.1\% of the population
+  + **Pr(vampire) = 0.001**
+  
+- using Bayes' theorem to find the probability of correctly identifying a vampire with this test (**Pr(vampire|position)**), we use Equation \ref{eq-vampire-positive}
+
+$$
+\text{Pr(vampire|positive)} = \frac{\text{Pr(positive|vampire) Pr(vampire)}}{\text{Pr(positive)}} \label{eq-vampire-positive}
+$$
+
+- we can compute this using these known probabilities
+
+```{r}
+#| label: tbl-probabilties
+#| tbl-cap: Probabilties
+#| echo: false
+tibble(pr_positive_vampire = .95,
+       pr_positive_mortal  = .01,
+       pr_vampire          = .001) %>% 
+  mutate(pr_positive = pr_positive_vampire * pr_vampire + pr_positive_mortal * (1 - pr_vampire)) %>% 
+  mutate(pr_vampire_positive = pr_positive_vampire * pr_vampire / pr_positive) %>% 
+  t() |> #transpose
+  kable(digits = 3) |> 
+  kable_styling()
+```
+
+- or to look at observed frequencies
+
+```{r}
+#| label: tbl-frequencies
+#| tbl-cap: Frequencies
+#| echo: false
+tibble(pr_vampire          = 100 / 100000,
+       pr_positive_vampire = 95 / 100,
+       pr_positive_mortal  = 99 / 99900) %>% 
+  mutate(pr_positive = 95 + 999) %>% 
+  mutate(pr_vampire_positive = pr_positive_vampire * 100 / pr_positive) %>% 
+   t() |> #transpose
+  kable(digits = 3) |> 
+  kable_styling()
+```
+
+- McElreath points out that most people find it more intuitive to think about counts, rather than p;ugging probabilities into the right place in Bayes' theorem, which is often called the *frequency format* or *natural frequencies*
+
+> Working with samples transforms a problem in calculus into a problem in data summary, into a frequency format problem.
+- p. 51
+
+## Sampling from a grid-like approximate posterior
+
+## Sapling to summarise
+
+## Sampling to simulate prediction
+
+## Summary
+
+## Terms and concepts
+
+```{r}
+#| label: tbl-functions
+#| tbl-cap: Useful terms and functions
+#| echo: false
+
+tribble(
+  ~`term/function`, ~definition,
+  "`rbinom(n, size, prob)`","",
+  "`PI(distribution, prob)`", "rethinking package: compute percentile compatiability interval from posterior",
+  "`HPDI(distribution, prob)`", "produces interval that best representats the parameter values most consistent with the data",
+) |> 
+  kable() |> kable_styling()
+
+```
+
+
+## Practice
+
+### Easy
+
+> The Easy problems use the samples from the posterior distribution for the globe tossing example. This code will give you a specific set of samples, so that you can check your answers exactly...Use the values in samples to answer the questions that follow.
+- p. 68
+
+```{r}
+# R code 3.27
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- rep( 1 , 1000 ) 
+likelihood <- dbinom( 6 , size=9 , prob=p_grid ) 
+posterior <- likelihood * prior 
+posterior <- posterior / sum(posterior)
+
+set.seed(100) 
+samples <- sample( p_grid , prob=posterior , size=1e4 , replace=TRUE )
+
+```
+
+```{r}
+#| label: fig-samples-hist
+#| fig-cap: Histogram of samples
+
+hist(samples)
+```
+
+
+
+#### Easy 1
+
+> How much posterior probability lies below p = 0.2?
+
+```{r}
+length(samples[samples < 0.2])/length(samples)
+```
+
+```{r}
+# or
+sum(samples < .2)/length(samples)
+```
+
+
+#### Easy 2
+
+> How much posterior probability lies above p = 0.8?
+
+```{r}
+sum(samples > .8)/length(samples)
+```
+
+#### Easy 3
+
+> How much posterior probability lies between p = 0.2 and p = 0.8?
+
+```{r}
+sum(samples < 0.8 & samples > 0.2)/length(samples)
+```
+
+#### Easy 4
+
+> 20% of the posterior probability lies below which value of p?
+
+```{r}
+quantile(samples, .2)
+```
+
+#### Easy 5
+
+> 20% of the posterior probability lies above which value of p?
+
+```{r}
+quantile(samples, .8)
+```
+
+#### Easy 6
+
+> Which values of p contain the narrowest interval equal to 66% of the posterior probability? 
+
+I used the `rethinking::PI()` function, which is wrong:
+
+```{r}
+PI(samples, prob = .66)
+```
+
+Should've used the `rethinking::HDPI` function, because we wanted the *highest posterior density interval*.
+
+```{r}
+HPDI(samples, prob = .66)
+```
+
+```{r}
+pacman::p_load(tidybayes)
+tidybayes::mode_hdi(samples, .width = .66)
+```
+
+
+#### Easy 7
+
+> Which values of p contain 66% of the posterior probability, assuming equal posterior probability both below and above the interval?
+
+I used the `rethinking::HDPI()` function, which is wrong:
+
+```{r}
+HPDI(samples, prob = .66)
+```
+
+I should've used the `rethinking::PI()` function, because e wanted the *conventional* percentile interval.
+
+```{r}
+PI(samples, prob = .66)
+```
+
+### Medium
+
+#### Medium 1
+
+> 3M1. Suppose the globe tossing data had turned out to be 8 water in 15 tosses. Construct the posterior distribution, using grid approximation. Use the same flat prior as before.
+
+```{r}
+# R code 3.27
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- rep( 1 , 1000 ) 
+likelihood <- dbinom( 8 , size=15 , prob=p_grid ) 
+posterior <- likelihood * prior 
+posterior <- posterior / sum(posterior)
+
+set.seed(100) 
+samples_m <- sample( p_grid , prob=posterior , size=1e4 , replace=TRUE )
+
+```
+
+```{r}
+#| label: fig-samples2-hist
+#| fig-cap: Histogram of samples
+
+hist(samples_m)
+```
+
+Correct, but McElreath uses this plot:
+
+```{r}
+plot(posterior ~ p_grid, type = "l")
+```
+
+
+#### Medium 2
+
+> 3M2. Draw 10,000 samples from the grid approximation from above. Then use the samples to calculate the 90% HPDI for p.
+
+10000 samples is the same thing, no? `1e4` in scientific notation = 10000. I'll re-run it, but since we've set our seed it shouldn't be any different.
+
+```{r}
+samples_10g <- sample( p_grid , prob=posterior , size=1e4 , replace=TRUE )
+```
+
+And caldulate the 90\% HPDI for p:
+
+```{r}
+HPDI(samples_m, prob = .9)
+```
+
+After checking teh answers, I was right, it is the same as above, it's just that question M1 didn't also ask me to draw the random samples.
+
+#### Medium 3
+
+
+
+
+

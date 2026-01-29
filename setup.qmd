@@ -1,0 +1,94 @@
+---
+execute:
+  echo: true
+  eval: false
+---
+
+# Set-up {.unnumbered}
+
+## Packages
+
+To be run prior to the other scripts.
+
+```{r}
+#| eval: false
+install.packages("pacman")
+pacman::p_load(devtools)
+
+# install developer packages
+remotes::install_github("bnicenboim/bcogsci")
+remotes::install_github("stan-dev/cmdstanr")
+install.packages(c("coda","mvtnorm","devtools","loo","dagitty","shape"))
+devtools::install_github("rmcelreath/rethinking")
+```
+
+```{r}
+pacman::p_load(
+MASS,
+## be careful to load dplyr after MASS
+dplyr,
+tidyr,
+purrr,
+extraDistr,
+ggplot2,
+loo,
+bridgesampling,
+brms,
+bayesplot,
+tictoc,
+hypr,
+bcogsci,
+lme4,
+rethinking,
+rstan,
+# This package is optional, see https://mc-stan.org/cmdstanr/:
+cmdstanr,
+# This package is optional, see https://hyunjimoon.github.io/SBC/:
+SBC, 
+SHELF,
+rootSolve
+)
+
+# could be added to the top of scripts:
+## Save compiled models:
+rstan_options(auto_write = FALSE)
+## Parallelize the chains using all the cores:
+options(mc.cores = parallel::detectCores())
+# To solve some conflicts between packages:
+select <- dplyr::select
+extract <- rstan::extract
+```
+
+## Writing tips
+
+To render documents with equations in HTML *and* PDF, specifically with alignment and numbering of multiple equations in one chunk, avoid using `$$` *and* `\begin{align}`. I like `$$` because it gives you a preview of your equation, but it crashes when rendering a PDF with `\begin{align}`, because pandoc reads this as doubly opening an equation/mathmode (as far as I understand it). So, the solution is to just use `\begin{align}` when I want to align more than one equation.
+
+The following will not allow PDF to render:
+
+```{r}
+#| eval: false
+# will render in HTML but not PDF:
+$$
+\begin{align}
+y &\sim Normal(\mu,\sigma) \label{eq-normal} \\
+y &\sim binomial(N = 1, p) \label{eq-binomial}
+\end{align}
+$$
+```
+
+The following will allow PDF to render, and will be printed as in @eq-normal1 and @eq-binomial2
+```{r}
+#| eval: false
+# will render in both HTML and PDF:
+\begin{align}
+y &\sim Normal(\mu,\sigma) \label{eq-normal} \\
+y &\sim binomial(N = 1, p) \label{eq-binomial}
+\end{align}
+```
+
+\begin{align}
+y &\sim Normal(\mu,\sigma) \label{eq-normal1} \\
+y &\sim binomial(N = 1, p) \label{eq-binomial2}
+\end{align}
+
+It's still helpful to use `$$` when writing so you can check that your equation will be printed as you intend. Just remember to remove them/comment them out before rendering.

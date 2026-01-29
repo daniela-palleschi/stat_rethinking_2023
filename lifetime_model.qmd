@@ -1,0 +1,195 @@
+---
+title: "lifetime_model"
+---
+
+```{r}
+pacman::p_load(
+  tidyverse,
+  janitor,
+  here,
+  brms,
+  cmdstanr,
+  tidybayes
+)
+```
+
+
+```{r}
+df_exp1 <- read.csv(here::here("01-data", "tidy", "exp1_data_tidy.csv")) %>% 
+  clean_names() %>% # tidy variable names
+  filter(str_detect(region, "^verb")) %>% # keep only critical regions
+  mutate(region = fct_relevel(region, "verb-1","verb", "verb+1", "verb+2", "verb+3", "verb+4"))
+
+levels(df_exp1$region)
+```
+
+```{r}
+pbrm <- function(m, i, precision = 2) {
+  fe <- fixef(m)
+  chain <- as.mcmc(m, combine_chains=TRUE)[,i]
+  sprintf(paste0("$\\hat\\beta=%.2g$\\,ms, 95\\%%-CrI: $[%.2g, %.",precision,"g]$\\,ms, $P(\\beta %s 0) %s %.2g$"),
+          round(exp(fe[1,1] + fe[i,1]) - exp(fe[1,1] - fe[i,1]), 2),
+          round(exp(fe[1,1] + fe[i,3]) - exp(fe[1,1] - fe[i,3]), 2),
+          round(exp(fe[1,1] + fe[i,4]) - exp(fe[1,1] - fe[i,4]), 2),
+          ifelse(fe[i,1] > 0, ">", "<"),
+          ifelse(mean(0 > chain)>0.99 || mean(0 < chain)>0.99, ">", "="),
+          atmost_0.99(
+            ifelse(
+              fe[i,1] > 0,
+              mean(0 < chain),
+              mean(0 > chain))))
+}
+```
+
+
+# Subset: verb region
+
+```{r}
+df_exp1_v <- df_exp1 %>% 
+  filter(region == "verb") %>% 
+  na.omit(tt)
+```
+
+# Sum coding
+
+```{r}
+df_exp1_v$congruence <- as_factor(df_exp1_v$congruence)
+contrasts(df_exp1_v$congruence) <- c(-0.5,+0.5)
+contrasts(df_exp1_v$congruence)
+```
+
+```{r}
+df_exp1_v$tense <- as_factor(df_exp1_v$tense)
+contrasts(df_exp1_v$tense) <- c(+0.5,-0.5)
+contrasts(df_exp1_v$tense)
+```
+
+
+
+## Model
+
+### Total time at verb
+
+```{r}
+# library(brms)
+fit_exp1_tt <- brm(tt ~ 1,
+  data = df_exp1_v,
+  family = lognormal(),
+  prior = c(
+    prior(normal(6, 1.5), class = Intercept),
+    prior(normal(0, 1), class = sigma)
+  )
+  # sample_prior = "only", # this is how we tell the model to only produce priors!
+  # control = list(adapt_delta = .9)
+)
+```
+
+```{r}
+plot(fit_exp1_tt)
+```
+
+## Mixed model
+
+```{r}
+get_prior(tt ~ tense*congruence +
+            (1 + tense*congruence||px) +
+            (1 + tense*congruence||item),
+          data = df_exp1_v,
+          priors = prior_tt)
+```
+
+## Simple model
+
+
+```{r}
+prior_tt <-
+  c(
+    prior(normal(6, 1.5), class = Intercept),
+    prior(normal(0, 10), class = b),
+    prior(normal(0, 50), class = sigma),
+    prior(normal(0, 20), class = sd)
+  )
+```
+
+
+```{r}
+fit_stroop <- brm(tt ~ tense*congruence + 
+                    (1 + tense*congruence || px) +
+                    (1 + tense*congruence || item),
+  family = lognormal(),
+  prior = prior_tt,
+  data = df_exp1_v,
+  chains = 4,
+  iter = 2000,
+  warmup = 1000
+)
+```
+
+```{r}
+plot(fit_stroop)
+```   
+
+```{r}
+fit_stroop
+```
+
+```{r}
+fit_stroop$fit
+```
+
+```{r}
+pp_check(fit_stroop,ndraws = 100, type = "dens_overlay")
+
+pp_check(fit_stroop, type = "stat", stat = "min")
+```
+
+## Priors from Chromy 2023
+
+```{r}
+# priors from Chromy et al (2023): https://osf.io/zd7fa
+priors <- c(set_prior("normal(5, 1)", class = "Intercept"),
+            set_prior("normal(0, 0.5)", class = "b"),
+            set_prior("normal(0, 0.5)", class = "sd"),   
+            set_prior("normal(0, 1)", class = "sigma"),
+            set_prior("lkj(2)", class = "cor")
+)
+```
+
+```{r}
+fit_tt <- brm(tt ~ tense*congruence + trial +
+                     (1 + tense*congruence | px)+
+                     (1 + tense*congruence | item),
+                   family=lognormal(),
+                   data = df_exp1_v,
+                   prior = priors,
+                   cores = 4L, chains = 4,
+                   backend = "cmdstanr", threads = threading(8),
+                   iter = 4000, #control = my_controls,
+                   save_pars = save_pars(all = TRUE),
+                   file = "fits/precrit_mod_E")
+```
+
+```{r}
+summary(fit_tt)
+```
+
+
+```{r}
+fit_tt %>%
+  spread_draws(b_Intercept, b_tense1, b_congruence1, `b_tense1:congruence1`) |> 
+  transmute(pp_con =    exp(b_Intercept + (-0.5)*b_tense1 + (-0.5)*b_congruence1 + `b_tense1:congruence1`),
+            pp_incon =    exp(b_Intercept + (-0.5)*b_tense1 - (0.5)*b_congruence1 + (-0.5)*`b_tense1:congruence1`),
+            sf_con =  exp(b_Intercept + (0.5)*b_tense1 + (-0.5)*b_congruence1 - `b_tense1:congruence1`),
+            sf_incon =  exp(b_Intercept + (0.5)*b_tense1 + (0.5)*b_congruence1 + `b_tense1:congruence1`),
+            pp.diff = pp_incon - pp_con,
+            sf.diff = sf_incon - sf_con) %>%
+  median_qi(sf.diff, pp.diff)
+```
+
+
+
+
+
+
+
+
